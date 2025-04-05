@@ -10,8 +10,8 @@ interface IUniswapV2Factory {
 
 interface IUniswapV2Pair {
     function getReserves() external view returns (
-        uint112 reserve0, 
-        uint112 reserve1, 
+        uint112 reserve0,
+        uint112 reserve1,
         uint32 blockTimestampLast
     );
 
@@ -32,6 +32,11 @@ contract DEXAggregator {
         uint256 amountIn,
         uint256 amountOut
     );
+
+    struct QuoteInfo {
+        string dex;
+        uint256 amountOut;
+    }
 
     constructor(
         address _quoter,
@@ -102,17 +107,36 @@ contract DEXAggregator {
         }
     }
 
-    /// @notice Returns the best quote available for WETH → USDC
-    /// @return bestAmountOut The best output amount
-    /// @return dex The DEX name: "UniswapV3" or "Sushiswap"
-    function getBestQuote(uint256 amountIn) external returns (uint256 bestAmountOut, string memory dex) {
-        uint256 uniAmountOut = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
-        uint256 sushiAmountOut = getQuoteSushiswap(amountIn);
+    /// @notice Returns the best quote available for WETH → USDC with slippage
+    /// @param amountIn The amount of WETH to swap
+    /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
+    /// @return bestAmountOut Raw best quote (before slippage)
+    /// @return dex Name of the DEX with best quote
+    /// @return minAmountOut Minimum amount acceptable after slippage
+function getBestQuote(uint256 amountIn, uint256 slippageBps)
+    external
+    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut) {
+    QuoteInfo[] memory quotes = new QuoteInfo[](2);
 
-        if (uniAmountOut >= sushiAmountOut) {
-            return (uniAmountOut, "UniswapV3");
-        } else {
-            return (sushiAmountOut, "Sushiswap");
+    // Uniswap V3 quote
+    uint256 uniAmountOut = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
+    quotes[0] = QuoteInfo("UniswapV3", uniAmountOut);
+
+    // Sushiswap quote
+    uint256 sushiAmountOut = getQuoteSushiswap(amountIn);
+    quotes[1] = QuoteInfo("Sushiswap", sushiAmountOut);
+
+    // Find best
+    QuoteInfo memory best = quotes[0];
+    for (uint i = 1; i < quotes.length; i++) {
+        if (quotes[i].amountOut > best.amountOut) {
+            best = quotes[i];
         }
     }
+
+    // Apply slippage: minOut = bestOut * (1 - slippageBps / 10,000)
+    minAmountOut = (best.amountOut * (10_000 - slippageBps)) / 10_000;
+    return (best.amountOut, best.dex, minAmountOut);
+}
+
 }

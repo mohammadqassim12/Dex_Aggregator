@@ -29,10 +29,16 @@ async function main() {
     console.log("  WETH:", ethers.formatUnits(reserveWETH, 18));
     console.log("  USDC:", ethers.formatUnits(reserveUSDC, 6));
 
-    const [bestAmountOut, dexName] = await aggregator.getFunction("getBestQuote").staticCall(amountIn);
+    const slippageBps = 50; // 0.5% slippage
+    const [bestAmountOut, dexName, minAmountOut] = await aggregator
+      .getFunction("getBestQuote")
+      .staticCall(amountIn, slippageBps);
+    
     console.log("🚀 Best Quote:");
     console.log(`  DEX: ${dexName}`);
-    console.log("  Amount Out:", ethers.formatUnits(bestAmountOut, 6), "USDC");
+    console.log("  Raw Amount Out:", ethers.formatUnits(bestAmountOut, 6), "USDC");
+    console.log("  Min Amount Out (after slippage):", ethers.formatUnits(minAmountOut, 6), "USDC");
+    
 }
 
 main()
