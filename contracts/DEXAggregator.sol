@@ -107,43 +107,96 @@ contract DEXAggregator {
         }
     }
 
-    /// @notice Returns the best quote available for WETH → USDC with slippage
-    /// @param amountIn The amount of WETH to swap
-    /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
-    /// @return bestAmountOut Raw best quote (before slippage)
-    /// @return dex Name of the DEX with best quote
-    /// @return minAmountOut Minimum amount acceptable after slippage
-function getBestQuote(uint256 amountIn, uint256 slippageBps)
-    external
-    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut)
-{
-    QuoteInfo[] memory quotes = new QuoteInfo[](4);
-
-    // Uniswap V3 quotes from multiple fee tiers
-    uint256 uni005 = getQuoteUniswapV3(amountIn, weth, usdc, 500);
-    quotes[0] = QuoteInfo("UniswapV3 (0.05%)", uni005);
-
-    uint256 uni03 = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
-    quotes[1] = QuoteInfo("UniswapV3 (0.3%)", uni03);
-
-    uint256 uni10 = getQuoteUniswapV3(amountIn, weth, usdc, 10000);
-    quotes[2] = QuoteInfo("UniswapV3 (1%)", uni10);
-
-    // Sushiswap quote
-    uint256 sushi = getQuoteSushiswap(amountIn);
-    quotes[3] = QuoteInfo("Sushiswap", sushi);
-
-    // Find best quote
-    QuoteInfo memory best = quotes[0];
-    for (uint i = 1; i < quotes.length; i++) {
-        if (quotes[i].amountOut > best.amountOut) {
-            best = quotes[i];
+    // @notice Helper function to convert uint to string
+    /// @param _i The uint to convert
+    /// @return str The string representation of the uint
+    function uint2str(uint _i) internal pure returns (string memory str) {
+        if (_i == 0) {
+            return "0";
         }
+        uint j = _i;
+        uint len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint k = len;
+        while (_i != 0) {
+            k = k - 1;
+            uint8 temp = uint8(48 + _i % 10);
+            bstr[k] = bytes1(temp);
+            _i /= 10;
+        }
+        str = string(bstr);
     }
 
-    minAmountOut = (best.amountOut * (10_000 - slippageBps)) / 10_000;
-    return (best.amountOut, best.dex, minAmountOut);
-}
 
+    /// @notice Finds the best output by splitting a trade between Uniswap and Sushiswap
+    /// @param amountIn The input amount of WETH
+    /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
+    /// @return bestAmountOut The highest combined USDC output
+    /// @return dex A human-readable route description
+    /// @return minAmountOut Minimum output accounting for slippage
+    /// @return splitPercentToUni Percentage of trade to route through Uniswap
+    function getBestQuoteWithSplit(uint256 amountIn, uint256 slippageBps)
+        external
+        returns (
+            uint256 bestAmountOut,
+            string memory dex,
+            uint256 minAmountOut,
+            uint256 splitPercentToUni
+        )
+    {
+        // STEP 1: Find best Uniswap V3 fee tier
+        uint24[3] memory fees = [uint24(500), 3000, 10000];
+        uint256 bestUniOut = 0;
+        uint24 bestUniFee = 3000;
+
+        for (uint256 i = 0; i < fees.length; i++) {
+            uint256 quote = getQuoteUniswapV3(amountIn, weth, usdc, fees[i]);
+            if (quote > bestUniOut) {
+                bestUniOut = quote;
+                bestUniFee = fees[i];
+            }
+        }
+
+        // STEP 2: Run split routing loop with best Uni fee vs Sushiswap
+        uint256 step = 10;
+        uint256 maxOut = 0;
+        uint256 bestSplit = 0;
+
+        for (uint256 i = step; i < 100; i += step) {
+            uint256 uniAmount = (amountIn * i) / 100;
+            uint256 sushiAmount = amountIn - uniAmount;
+
+            uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, bestUniFee);
+            uint256 sushiOut = getQuoteSushiswap(sushiAmount);
+
+            uint256 totalOut = uniOut + sushiOut;
+
+            if (totalOut > maxOut) {
+                maxOut = totalOut;
+                bestSplit = i;
+            }
+        }
+
+        // STEP 3: Calculate slippage and return result
+        minAmountOut = (maxOut * (10_000 - slippageBps)) / 10_000;
+
+        string memory dexRoute = string(
+            abi.encodePacked(
+                "Split: ",
+                uint2str(bestSplit),
+                "% Uniswap V3 (",
+                uint2str(bestUniFee),
+                ") / ",
+                uint2str(100 - bestSplit),
+                "% Sushiswap"
+            )
+        );
+
+        return (maxOut, dexRoute, minAmountOut, bestSplit);
+    }
 
 }

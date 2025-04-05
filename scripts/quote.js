@@ -7,38 +7,23 @@ async function main() {
 
     const addresses = JSON.parse(fs.readFileSync(path.join(__dirname, "deployed-addresses.json")));
     const aggregator = await ethers.getContractAt("DEXAggregator", addresses.dexAggregator);
-    //the abi of the contract is 
 
     const amountIn = ethers.parseUnits("1", 18);
-    const fee = 3000;
-    const ethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-
-
-    /* Thi will be removed later, left for testing */
-    // Uniswap V3 Quote
-    const amountOutUni = await aggregator.getFunction("getQuoteUniswapV3").staticCall(amountIn, ethAddress, usdcAddress, fee);
-    console.log("Uniswap V3 Quote for 1 WETH:", ethers.formatUnits(amountOutUni, 6), "USDC");
-
-    // Sushiswap Quote
-    const sushiQuote = await aggregator.getQuoteSushiswap(amountIn);
-    console.log("Sushiswap Quote for 1 WETH:", ethers.formatUnits(sushiQuote, 6), "USDC");
-
-    // Pool Reserves
-    const [reserveWETH, reserveUSDC] = await aggregator.getSushiswapReserves();
-    console.log("Sushiswap Reserves:");
-    console.log("  WETH:", ethers.formatUnits(reserveWETH, 18));
-    console.log("  USDC:", ethers.formatUnits(reserveUSDC, 6));
-    // END of Will be removed later, left for testing
     const slippageBps = 50; // 0.5% slippage
-    const [bestAmountOut, dexName, minAmountOut] = await aggregator
-      .getFunction("getBestQuote")
+
+    const [bestAmountOut, dexName, minAmountOut, splitPercentToUni] = await aggregator
+      .getFunction("getBestQuoteWithSplit")
       .staticCall(amountIn, slippageBps);
     
-    console.log("🚀 Best Quote:");
-    console.log(`  DEX: ${dexName}`);
+    console.log("🚀 Best Quote with Split Routing:");
+    console.log(`  Route: ${dexName}`);
     console.log("  Raw Amount Out:", ethers.formatUnits(bestAmountOut, 6), "USDC");
     console.log("  Min Amount Out (after slippage):", ethers.formatUnits(minAmountOut, 6), "USDC");
+    const uniSplit = Number(splitPercentToUni);
+    const sushiSplit = 100 - uniSplit;
+    
+    console.log(`  Split: ${uniSplit}% to Uniswap / ${sushiSplit}% to Sushiswap`);
+        
     
 }
 
