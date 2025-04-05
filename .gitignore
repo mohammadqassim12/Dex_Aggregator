@@ -1,0 +1,7 @@
+.DS_Store
+artifacts/
+cache/
+node_modules/
+.env
+scripts/deployed-addresses.json
+
