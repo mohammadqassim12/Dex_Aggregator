@@ -115,18 +115,25 @@ contract DEXAggregator {
     /// @return minAmountOut Minimum amount acceptable after slippage
 function getBestQuote(uint256 amountIn, uint256 slippageBps)
     external
-    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut) {
-    QuoteInfo[] memory quotes = new QuoteInfo[](2);
+    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut)
+{
+    QuoteInfo[] memory quotes = new QuoteInfo[](4);
 
-    // Uniswap V3 quote
-    uint256 uniAmountOut = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
-    quotes[0] = QuoteInfo("UniswapV3", uniAmountOut);
+    // Uniswap V3 quotes from multiple fee tiers
+    uint256 uni005 = getQuoteUniswapV3(amountIn, weth, usdc, 500);
+    quotes[0] = QuoteInfo("UniswapV3 (0.05%)", uni005);
+
+    uint256 uni03 = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
+    quotes[1] = QuoteInfo("UniswapV3 (0.3%)", uni03);
+
+    uint256 uni10 = getQuoteUniswapV3(amountIn, weth, usdc, 10000);
+    quotes[2] = QuoteInfo("UniswapV3 (1%)", uni10);
 
     // Sushiswap quote
-    uint256 sushiAmountOut = getQuoteSushiswap(amountIn);
-    quotes[1] = QuoteInfo("Sushiswap", sushiAmountOut);
+    uint256 sushi = getQuoteSushiswap(amountIn);
+    quotes[3] = QuoteInfo("Sushiswap", sushi);
 
-    // Find best
+    // Find best quote
     QuoteInfo memory best = quotes[0];
     for (uint i = 1; i < quotes.length; i++) {
         if (quotes[i].amountOut > best.amountOut) {
@@ -134,9 +141,9 @@ function getBestQuote(uint256 amountIn, uint256 slippageBps)
         }
     }
 
-    // Apply slippage: minOut = bestOut * (1 - slippageBps / 10,000)
     minAmountOut = (best.amountOut * (10_000 - slippageBps)) / 10_000;
     return (best.amountOut, best.dex, minAmountOut);
 }
+
 
 }

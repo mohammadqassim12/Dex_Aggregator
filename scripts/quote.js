@@ -15,6 +15,7 @@ async function main() {
     const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
 
+    /* Thi will be removed later, left for testing */
     // Uniswap V3 Quote
     const amountOutUni = await aggregator.getFunction("getQuoteUniswapV3").staticCall(amountIn, ethAddress, usdcAddress, fee);
     console.log("Uniswap V3 Quote for 1 WETH:", ethers.formatUnits(amountOutUni, 6), "USDC");
@@ -28,7 +29,7 @@ async function main() {
     console.log("Sushiswap Reserves:");
     console.log("  WETH:", ethers.formatUnits(reserveWETH, 18));
     console.log("  USDC:", ethers.formatUnits(reserveUSDC, 6));
-
+    // END of Will be removed later, left for testing
     const slippageBps = 50; // 0.5% slippage
     const [bestAmountOut, dexName, minAmountOut] = await aggregator
       .getFunction("getBestQuote")
