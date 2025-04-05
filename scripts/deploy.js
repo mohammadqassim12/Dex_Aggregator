@@ -9,6 +9,11 @@ const sushiswapFactoryAddress = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
 const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
+
+// New router addresses
+const MAINNET_UNISWAP_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
+const SUSHISWAP_ROUTER = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F";
+
 async function main() {
     const [deployer] = await ethers.getSigners();
     const balance = await deployer.provider.getBalance(deployer.address);
@@ -21,6 +26,8 @@ async function main() {
         wethAddress,
         usdcAddress,
         MAINNET_UNISWAP_QUOTER,
+        MAINNET_UNISWAP_ROUTER,
+        SUSHISWAP_ROUTER
     };
 
     // Validate addresses
@@ -36,7 +43,9 @@ async function main() {
         addresses.MAINNET_UNISWAP_QUOTER,
         addresses.sushiswapFactoryAddress,
         addresses.wethAddress,
-        addresses.usdcAddress
+        addresses.usdcAddress,
+        addresses.MAINNET_UNISWAP_ROUTER,
+        addresses.SUSHISWAP_ROUTER
     );
 
     console.log("Waiting for deployment...");

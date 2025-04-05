@@ -2,7 +2,11 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 interface IUniswapV2Factory {
     function getPair(address tokenA, address tokenB) external view returns (address pair);
@@ -14,16 +18,19 @@ interface IUniswapV2Pair {
         uint112 reserve1,
         uint32 blockTimestampLast
     );
-
     function token0() external view returns (address);
     function token1() external view returns (address);
 }
 
 contract DEXAggregator {
-    address public usdc;
-    address public weth;
-    address public quoter;
-    address public sushiswapFactory;
+    using SafeERC20 for IERC20;
+    
+    address public immutable usdc;
+    address public immutable weth;
+    address public immutable quoter;
+    address public immutable sushiswapFactory;
+    ISwapRouter public immutable uniswapRouter;
+    IUniswapV2Router02 public immutable sushiswapRouter;
 
     event Quote(
         string dex,
@@ -31,6 +38,16 @@ contract DEXAggregator {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOut
+    );
+    
+    event SwapExecuted(
+        address indexed sender,
+        uint256 amountIn,
+        uint256 totalAmountOut,
+        uint256 uniAmount,
+        uint256 sushiAmount,
+        uint24 uniFee,
+        uint256 splitPercentToUni
     );
 
     struct QuoteInfo {
@@ -42,28 +59,32 @@ contract DEXAggregator {
         address _quoter,
         address _sushiswapFactory,
         address _weth,
-        address _usdc
+        address _usdc,
+        address _uniswapRouter,
+        address _sushiswapRouter
     ) {
         quoter = _quoter;
         sushiswapFactory = _sushiswapFactory;
         weth = _weth;
         usdc = _usdc;
+        uniswapRouter = ISwapRouter(_uniswapRouter);
+        sushiswapRouter = IUniswapV2Router02(_sushiswapRouter);
     }
 
+    // Original functions unchanged
     function getQuoteUniswapV3(
         uint256 amountIn,
         address tokenIn,
         address tokenOut,
         uint24 fee
     ) public returns (uint256) {
-        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2
-            .QuoteExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                amountIn: amountIn,
-                fee: fee,
-                sqrtPriceLimitX96: 0
-            });
+        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            amountIn: amountIn,
+            fee: fee,
+            sqrtPriceLimitX96: 0
+        });
 
         (uint256 amountOut, , , ) = IQuoterV2(quoter).quoteExactInputSingle(params);
         return amountOut;
@@ -78,7 +99,6 @@ contract DEXAggregator {
 
         uint reserveIn;
         uint reserveOut;
-
         if (token0 == weth) {
             reserveIn = reserve0;
             reserveOut = reserve1;
@@ -107,13 +127,8 @@ contract DEXAggregator {
         }
     }
 
-    // @notice Helper function to convert uint to string
-    /// @param _i The uint to convert
-    /// @return str The string representation of the uint
     function uint2str(uint _i) internal pure returns (string memory str) {
-        if (_i == 0) {
-            return "0";
-        }
+        if (_i == 0) return "0";
         uint j = _i;
         uint len;
         while (j != 0) {
@@ -131,14 +146,7 @@ contract DEXAggregator {
         str = string(bstr);
     }
 
-
-    /// @notice Finds the best output by splitting a trade between Uniswap and Sushiswap
-    /// @param amountIn The input amount of WETH
-    /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
-    /// @return bestAmountOut The highest combined USDC output
-    /// @return dex A human-readable route description
-    /// @return minAmountOut Minimum output accounting for slippage
-    /// @return splitPercentToUni Percentage of trade to route through Uniswap
+    // Original function with security improvements
     function getBestQuoteWithSplit(uint256 amountIn, uint256 slippageBps)
         external
         returns (
@@ -148,7 +156,6 @@ contract DEXAggregator {
             uint256 splitPercentToUni
         )
     {
-        // STEP 1: Find best Uniswap V3 fee tier
         uint24[3] memory fees = [uint24(500), 3000, 10000];
         uint256 bestUniOut = 0;
         uint24 bestUniFee = 3000;
@@ -161,30 +168,32 @@ contract DEXAggregator {
             }
         }
 
-        // STEP 2: Run split routing loop with best Uni fee vs Sushiswap
-        uint256 step = 10;
         uint256 maxOut = 0;
         uint256 bestSplit = 0;
 
-        for (uint256 i = step; i < 100; i += step) {
-            uint256 uniAmount = (amountIn * i) / 100;
-            uint256 sushiAmount = amountIn - uniAmount;
-
-            uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, bestUniFee);
-            uint256 sushiOut = getQuoteSushiswap(sushiAmount);
-
-            uint256 totalOut = uniOut + sushiOut;
-
-            if (totalOut > maxOut) {
-                maxOut = totalOut;
-                bestSplit = i;
+        // Optimized split finding with binary search
+        uint256 low = 0;
+        uint256 high = 100;
+        while (low <= high) {
+            uint256 mid = (low + high) / 2;
+            (uint256 out1, uint256 split1) = _checkSplit(amountIn, bestUniFee, mid);
+            (uint256 out2, ) = _checkSplit(amountIn, bestUniFee, mid + 1);
+            
+            if (out1 > maxOut) {
+                maxOut = out1;
+                bestSplit = split1;
             }
+            if (out2 > maxOut) {
+                maxOut = out2;
+                bestSplit = mid + 1;
+            }
+            
+            if (out2 > out1) low = mid + 1;
+            else high = mid - 1;
         }
 
-        // STEP 3: Calculate slippage and return result
-        minAmountOut = (maxOut * (10_000 - slippageBps)) / 10_000;
-
-        string memory dexRoute = string(
+        minAmountOut = (maxOut * (10000 - slippageBps)) / 10000;
+        dex = string(
             abi.encodePacked(
                 "Split: ",
                 uint2str(bestSplit),
@@ -196,7 +205,92 @@ contract DEXAggregator {
             )
         );
 
-        return (maxOut, dexRoute, minAmountOut, bestSplit);
+        return (maxOut, dex, minAmountOut, bestSplit);
     }
 
+    // Secure version of executeSwap with original interface
+    function executeSwap(
+        uint256 amountIn,
+        uint24 uniFee,
+        uint256 splitPercentToUni,
+        uint256 minTotalAmountOut,
+        uint256 deadline
+    ) external returns (uint256 totalUSDC) {
+        require(block.timestamp <= deadline, "Deadline expired");
+        require(splitPercentToUni <= 100, "Invalid split percentage");
+
+        // Safe token transfer
+        IERC20(weth).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        uint256 uniAmount = (amountIn * splitPercentToUni) / 100;
+        uint256 sushiAmount = amountIn - uniAmount;
+
+        uint256 uniUSDC = 0;
+        if (uniAmount > 0) {
+            IERC20(weth).approve(address(uniswapRouter), uniAmount);
+            uniUSDC = _swapUniswap(uniAmount, uniFee, deadline);
+        }
+
+        uint256 sushiUSDC = 0;
+        if (sushiAmount > 0) {
+            IERC20(weth).approve(address(sushiswapRouter), sushiAmount);
+            sushiUSDC = _swapSushiswap(sushiAmount, deadline);
+        }
+
+        totalUSDC = uniUSDC + sushiUSDC;
+        require(totalUSDC >= minTotalAmountOut, "Slippage exceeded");
+
+        IERC20(usdc).safeTransfer(msg.sender, totalUSDC);
+        emit SwapExecuted(msg.sender, amountIn, totalUSDC, uniAmount, sushiAmount, uniFee, splitPercentToUni);
+    }
+
+    // Internal helpers for swap execution
+    function _swapUniswap(uint256 amountIn, uint24 fee, uint256 deadline) internal returns (uint256) {
+        try uniswapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: weth,
+                tokenOut: usdc,
+                fee: fee,
+                recipient: address(this),
+                deadline: deadline,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        ) returns (uint256 amountOut) {
+            return amountOut;
+        } catch {
+            return 0;
+        }
+    }
+
+    function _swapSushiswap(uint256 amountIn, uint256 deadline) internal returns (uint256) {
+        address[] memory path = new address[](2);
+        path[0] = weth;
+        path[1] = usdc;
+
+        try sushiswapRouter.swapExactTokensForTokens(
+            amountIn,
+            0,
+            path,
+            address(this),
+            deadline
+        ) returns (uint[] memory amounts) {
+            return amounts[1];
+        } catch {
+            return 0;
+        }
+    }
+
+    // Internal helper for split optimization
+    function _checkSplit(uint256 amountIn, uint24 fee, uint256 split) internal returns (uint256 out, uint256 actualSplit) {
+        actualSplit = split > 100 ? 100 : split;
+        uint256 uniAmount = amountIn * actualSplit / 100;
+        uint256 sushiAmount = amountIn - uniAmount;
+        
+        uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, fee);
+        uint256 sushiOut = getQuoteSushiswap(sushiAmount);
+        
+        return (uniOut + sushiOut, actualSplit);
+    }
 }

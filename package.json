@@ -1,11 +1,31 @@
 {
+  "name": "dex_aggregator",
+  "version": "1.0.0",
+  "description": "Currently hardcoded for the USDC/WBTC",
+  "homepage": "https://github.com/mohammadqassim12/Dex_Aggregator#readme",
+  "bugs": {
+    "url": "https://github.com/mohammadqassim12/Dex_Aggregator/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohammadqassim12/Dex_Aggregator.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "hardhat.config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.2.0",
+    "@uniswap/sdk-core": "^7.7.2",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "@uniswap/v4-sdk": "^1.21.2",
+    "dotenv": "^16.4.7"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "hardhat": "^2.22.19"
-  },
-  "dependencies": {
-    "@uniswap/sdk-core": "^7.7.2",
-    "@uniswap/v4-sdk": "^1.21.2",
-    "dotenv": "^16.4.7"
   }
 }
