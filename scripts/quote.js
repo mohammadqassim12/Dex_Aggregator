@@ -28,6 +28,11 @@ async function main() {
     console.log("Sushiswap Reserves:");
     console.log("  WETH:", ethers.formatUnits(reserveWETH, 18));
     console.log("  USDC:", ethers.formatUnits(reserveUSDC, 6));
+
+    const [bestAmountOut, dexName] = await aggregator.getFunction("getBestQuote").staticCall(amountIn);
+    console.log("🚀 Best Quote:");
+    console.log(`  DEX: ${dexName}`);
+    console.log("  Amount Out:", ethers.formatUnits(bestAmountOut, 6), "USDC");
 }
 
 main()

@@ -20,14 +20,9 @@ interface IUniswapV2Pair {
 }
 
 contract DEXAggregator {
-    // Token references
     address public usdc;
     address public weth;
-
-    // Uniswap v3
     address public quoter;
-
-    // Sushiswap
     address public sushiswapFactory;
 
     event Quote(
@@ -50,7 +45,6 @@ contract DEXAggregator {
         usdc = _usdc;
     }
 
-    /// @notice Get a quote from Uniswap v3 using the Quoter contract
     function getQuoteUniswapV3(
         uint256 amountIn,
         address tokenIn,
@@ -70,14 +64,12 @@ contract DEXAggregator {
         return amountOut;
     }
 
-    /// @notice Estimate WETH → USDC from Sushiswap reserves
     function getQuoteSushiswap(uint256 amountIn) public view returns (uint256 amountOut) {
         address pair = IUniswapV2Factory(sushiswapFactory).getPair(weth, usdc);
         require(pair != address(0), "Pair not found");
 
         (uint112 reserve0, uint112 reserve1, ) = IUniswapV2Pair(pair).getReserves();
         address token0 = IUniswapV2Pair(pair).token0();
-        address token1 = IUniswapV2Pair(pair).token1();
 
         uint reserveIn;
         uint reserveOut;
@@ -85,18 +77,15 @@ contract DEXAggregator {
         if (token0 == weth) {
             reserveIn = reserve0;
             reserveOut = reserve1;
-        } else if (token1 == weth) {
+        } else {
             reserveIn = reserve1;
             reserveOut = reserve0;
-        } else {
-            revert("WETH not found in pair");
         }
 
         uint amountInWithFee = amountIn * 997;
         amountOut = (amountInWithFee * reserveOut) / (reserveIn * 1000 + amountInWithFee);
     }
 
-    /// @notice Get reserves from the Sushiswap WETH/USDC pool
     function getSushiswapReserves() public view returns (uint112 reserveWETH, uint112 reserveUSDC) {
         address pair = IUniswapV2Factory(sushiswapFactory).getPair(weth, usdc);
         require(pair != address(0), "Pair not found");
@@ -110,6 +99,20 @@ contract DEXAggregator {
         } else {
             reserveWETH = reserve1;
             reserveUSDC = reserve0;
+        }
+    }
+
+    /// @notice Returns the best quote available for WETH → USDC
+    /// @return bestAmountOut The best output amount
+    /// @return dex The DEX name: "UniswapV3" or "Sushiswap"
+    function getBestQuote(uint256 amountIn) external returns (uint256 bestAmountOut, string memory dex) {
+        uint256 uniAmountOut = getQuoteUniswapV3(amountIn, weth, usdc, 3000);
+        uint256 sushiAmountOut = getQuoteSushiswap(amountIn);
+
+        if (uniAmountOut >= sushiAmountOut) {
+            return (uniAmountOut, "UniswapV3");
+        } else {
+            return (sushiAmountOut, "Sushiswap");
         }
     }
 }
