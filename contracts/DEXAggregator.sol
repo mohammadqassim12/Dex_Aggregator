@@ -71,7 +71,6 @@ contract DEXAggregator {
         sushiswapRouter = IUniswapV2Router02(_sushiswapRouter);
     }
 
-    // Original functions unchanged
     function getQuoteUniswapV3(
         uint256 amountIn,
         address tokenIn,
@@ -127,6 +126,9 @@ contract DEXAggregator {
         }
     }
 
+    // @notice Helper function to convert uint to string
+    /// @param _i The uint to convert
+    /// @return str The string representation of the uint
     function uint2str(uint _i) internal pure returns (string memory str) {
         if (_i == 0) return "0";
         uint j = _i;
@@ -146,7 +148,13 @@ contract DEXAggregator {
         str = string(bstr);
     }
 
-    // Original function with security improvements
+    /// @notice Finds the best output by splitting a trade between Uniswap and Sushiswap
+    /// @param amountIn The input amount of WETH
+    /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
+    /// @return bestAmountOut The highest combined USDC output
+    /// @return dex A human-readable route description
+    /// @return minAmountOut Minimum output accounting for slippage
+    /// @return splitPercentToUni Percentage of trade to route through Uniswap
     function getBestQuoteWithSplit(uint256 amountIn, uint256 slippageBps)
         external
         returns (
@@ -156,6 +164,7 @@ contract DEXAggregator {
             uint256 splitPercentToUni
         )
     {
+        // STEP 1: Find best Uniswap V3 fee tier
         uint24[3] memory fees = [uint24(500), 3000, 10000];
         uint256 bestUniOut = 0;
         uint24 bestUniFee = 3000;
@@ -168,32 +177,30 @@ contract DEXAggregator {
             }
         }
 
+        // STEP 2: Run split routing loop with best Uni fee vs Sushiswap
+        uint256 step = 10;
         uint256 maxOut = 0;
         uint256 bestSplit = 0;
 
-        // Optimized split finding with binary search
-        uint256 low = 0;
-        uint256 high = 100;
-        while (low <= high) {
-            uint256 mid = (low + high) / 2;
-            (uint256 out1, uint256 split1) = _checkSplit(amountIn, bestUniFee, mid);
-            (uint256 out2, ) = _checkSplit(amountIn, bestUniFee, mid + 1);
-            
-            if (out1 > maxOut) {
-                maxOut = out1;
-                bestSplit = split1;
+        for (uint256 i = step; i < 100; i += step) {
+            uint256 uniAmount = (amountIn * i) / 100;
+            uint256 sushiAmount = amountIn - uniAmount;
+
+            uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, bestUniFee);
+            uint256 sushiOut = getQuoteSushiswap(sushiAmount);
+
+            uint256 totalOut = uniOut + sushiOut;
+
+            if (totalOut > maxOut) {
+                maxOut = totalOut;
+                bestSplit = i;
             }
-            if (out2 > maxOut) {
-                maxOut = out2;
-                bestSplit = mid + 1;
-            }
-            
-            if (out2 > out1) low = mid + 1;
-            else high = mid - 1;
         }
 
-        minAmountOut = (maxOut * (10000 - slippageBps)) / 10000;
-        dex = string(
+        // STEP 3: Calculate slippage and return result
+        minAmountOut = (maxOut * (10_000 - slippageBps)) / 10_000;
+
+        string memory dexRoute = string(
             abi.encodePacked(
                 "Split: ",
                 uint2str(bestSplit),
@@ -205,7 +212,7 @@ contract DEXAggregator {
             )
         );
 
-        return (maxOut, dex, minAmountOut, bestSplit);
+        return (maxOut, dexRoute, minAmountOut, bestSplit);
     }
 
     // Secure version of executeSwap with original interface

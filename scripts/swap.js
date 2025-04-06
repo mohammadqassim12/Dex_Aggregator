@@ -54,7 +54,7 @@ async function main() {
     const tx = await aggregator.executeSwap(
         amountIn,
         500,            // Fee tier 500
-        100,            // 100% routing through Uniswap V3
+        90,            // 100% routing through Uniswap V3
         0,              // For testing, set minTotalAmountOut to 0 (adjust for slippage in production)
         deadline,
         { gasLimit: 500000 }
