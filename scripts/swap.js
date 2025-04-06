@@ -50,11 +50,11 @@ async function main() {
 
     // Execute swap
     console.log("Executing swap...");
-    const deadline = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
+    const deadline = Math.floor(Date.now() / 1000) + 300; 
     const tx = await aggregator.executeSwap(
         amountIn,
-        500,            // Fee tier 500
-        90,            // 100% routing through Uniswap V3
+        500,            // Fee tier
+        90,            // % trough Uniswap V3
         0,              // For testing, set minTotalAmountOut to 0 (adjust for slippage in production)
         deadline,
         { gasLimit: 500000 }
