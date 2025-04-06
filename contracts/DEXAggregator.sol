@@ -47,7 +47,9 @@ contract DEXAggregator {
         uint256 uniAmount,
         uint256 sushiAmount,
         uint24 uniFee,
-        uint256 splitPercentToUni
+        uint256 splitPercentToUni,
+        address tokenIn,
+        address tokenOut
     );
 
     struct QuoteInfo {
@@ -215,48 +217,64 @@ contract DEXAggregator {
         return (maxOut, dexRoute, minAmountOut, bestSplit);
     }
 
-    // Secure version of executeSwap with original interface
+    /// @notice Generic function to execute a swap from tokenIn to tokenOut.
+    /// @param amountIn The input amount of tokenIn.
+    /// @param tokenIn The input token address.
+    /// @param tokenOut The output token address.
+    /// @param uniFee The Uniswap V3 fee tier.
+    /// @param splitPercentToUni The percentage of tokenIn to route through Uniswap V3 (0-100). The remainder goes to Sushiswap.
+    /// @param minTotalAmountOut The minimum acceptable total output.
+    /// @param deadline The deadline timestamp for the swap.
+    /// @return totalOut The total tokenOut received.
     function executeSwap(
         uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
         uint24 uniFee,
         uint256 splitPercentToUni,
         uint256 minTotalAmountOut,
         uint256 deadline
-    ) external returns (uint256 totalUSDC) {
+    ) external returns (uint256 totalOut) {
         require(block.timestamp <= deadline, "Deadline expired");
         require(splitPercentToUni <= 100, "Invalid split percentage");
 
-        // Safe token transfer
-        IERC20(weth).safeTransferFrom(msg.sender, address(this), amountIn);
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         uint256 uniAmount = (amountIn * splitPercentToUni) / 100;
         uint256 sushiAmount = amountIn - uniAmount;
 
-        uint256 uniUSDC = 0;
+        uint256 uniOut = 0;
         if (uniAmount > 0) {
-            IERC20(weth).approve(address(uniswapRouter), uniAmount);
-            uniUSDC = _swapUniswap(uniAmount, uniFee, deadline);
+            IERC20(tokenIn).approve(address(uniswapRouter), uniAmount);
+            uniOut = _swapUniswapGeneric(uniAmount, tokenIn, tokenOut, uniFee, deadline);
         }
 
-        uint256 sushiUSDC = 0;
+        uint256 sushiOut = 0;
         if (sushiAmount > 0) {
-            IERC20(weth).approve(address(sushiswapRouter), sushiAmount);
-            sushiUSDC = _swapSushiswap(sushiAmount, deadline);
+            IERC20(tokenIn).approve(address(sushiswapRouter), sushiAmount);
+            sushiOut = _swapSushiswapGeneric(sushiAmount, tokenIn, tokenOut, deadline);
         }
 
-        totalUSDC = uniUSDC + sushiUSDC;
-        require(totalUSDC >= minTotalAmountOut, "Slippage exceeded");
+        totalOut = uniOut + sushiOut;
+        require(totalOut >= minTotalAmountOut, "Slippage exceeded");
 
-        IERC20(usdc).safeTransfer(msg.sender, totalUSDC);
-        emit SwapExecuted(msg.sender, amountIn, totalUSDC, uniAmount, sushiAmount, uniFee, splitPercentToUni);
+        // Transfer tokenOut back to sender.
+        IERC20(tokenOut).safeTransfer(msg.sender, totalOut);
+        emit SwapExecuted(msg.sender, amountIn, totalOut, uniAmount, sushiAmount, uniFee, splitPercentToUni, tokenIn, tokenOut);
     }
 
-    // Internal helpers for swap execution
-    function _swapUniswap(uint256 amountIn, uint24 fee, uint256 deadline) internal returns (uint256) {
+    // Internal helper for Uniswap V3 swap (generic)
+    function _swapUniswapGeneric(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        uint256 deadline
+    ) internal returns (uint256) {
         try uniswapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: weth,
-                tokenOut: usdc,
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
                 fee: fee,
                 recipient: address(this),
                 deadline: deadline,
@@ -271,11 +289,16 @@ contract DEXAggregator {
         }
     }
 
-    function _swapSushiswap(uint256 amountIn, uint256 deadline) internal returns (uint256) {
+    // Internal helper for Sushiswap swap (generic)
+    function _swapSushiswapGeneric(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 deadline
+    ) internal returns (uint256) {
         address[] memory path = new address[](2);
-        path[0] = weth;
-        path[1] = usdc;
-
+        path[0] = tokenIn;
+        path[1] = tokenOut;
         try sushiswapRouter.swapExactTokensForTokens(
             amountIn,
             0,
@@ -283,21 +306,9 @@ contract DEXAggregator {
             address(this),
             deadline
         ) returns (uint[] memory amounts) {
-            return amounts[1];
+            return amounts[amounts.length - 1];
         } catch {
             return 0;
         }
-    }
-
-    // Internal helper for split optimization
-    function _checkSplit(uint256 amountIn, uint24 fee, uint256 split) internal returns (uint256 out, uint256 actualSplit) {
-        actualSplit = split > 100 ? 100 : split;
-        uint256 uniAmount = amountIn * actualSplit / 100;
-        uint256 sushiAmount = amountIn - uniAmount;
-        
-        uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, fee);
-        uint256 sushiOut = getQuoteSushiswap(sushiAmount);
-        
-        return (uniOut + sushiOut, actualSplit);
     }
 }
