@@ -71,7 +71,7 @@ export const Swap = () => {
   const [deadline, setDeadline] = useState<number>(2); // Default 2 minutes
 
   const { address: userAddress } = useAccount();
-  const { data: hash, writeContract, isPending, isSuccess, isError, reset } = useWriteContract();
+  const { data: hash, writeContractAsync, isPending, isSuccess, isError, reset } = useWriteContract();
 
   // Get from token balance
   const { data: fromBal } = useBalance({
@@ -169,34 +169,47 @@ export const Swap = () => {
     if (dexAggABI.address) {
       console.log(fromAmount / BigInt(10 ** fromToken.decimals));
       console.log(`Approving ${fromToken.symbol} for ${amountIn / BigInt(10 ** fromToken.decimals)}`);
-      await writeContract({
+      await writeContractAsync({
         address: fromToken.address as `0x${string}`,
         abi: erc20Abi,
         functionName: "approve",
         args: [dexAggABI.address as `0x${string}`, amountIn],
       });
     }
-
-    const args = [
-      amountIn,
-      fromToken.address,
-      toToken.address,
-      exchangedToken.data.result[4],
-      exchangedToken.data.result[3],
-      0n,
-      BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
-    ];
-    console.log("args", args);
-    await writeContract({
-      address: dexAggABI.address as `0x${string}`,
-      abi: dexAggABI.abi,
-      functionName: "executeSwap",
-      args: args as any,
-    });
-    // setFromAmount(0n);
-    // setToAmount(0n);
-    // setFromAmountInput("");
   };
+
+  // Prompt swap after approval
+  useEffect(() => {
+    if (!exchangedToken.data || !exchangedToken.data.result || fromAmount === 0n) {
+      return;
+    }
+    const amountIn = fromAmount;
+    if (isSuccess) {
+      const args = [
+        amountIn,
+        fromToken.address,
+        toToken.address,
+        exchangedToken.data.result[4],
+        exchangedToken.data.result[3],
+        0n,
+        BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
+      ];
+      console.log("args", args);
+      writeContractAsync({
+        address: dexAggABI.address as `0x${string}`,
+        abi: dexAggABI.abi,
+        functionName: "executeSwap",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        args: args as any,
+      });
+    }
+
+    if (isError) {
+      setLoading(false);
+      console.error("Error swapping:", isError);
+      reset();
+    }
+  }, [isSuccess, isError, hash, reset]);
 
   const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;

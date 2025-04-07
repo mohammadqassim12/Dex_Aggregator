@@ -1,5 +1,5 @@
 export const AppConfig = {
-    contractAddress: '0x9Af1C4691749C852857189bF3aB64ccE012D1dAC',
-    apiUrl: 'https://rpc.buildbear.io/neat-quicksilver-0c17575a',
-    id: 25420,
+    contractAddress: '0x03d9179078AC19EDB49c6b77E5Af28b13aB4DBc6',
+    apiUrl: 'https://rpc.buildbear.io/conservative-psylocke-3187ddff',
+    id: 25433,
 };

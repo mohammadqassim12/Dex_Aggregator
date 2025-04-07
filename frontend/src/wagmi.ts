@@ -11,7 +11,7 @@ const buildbear = {
         default: { http: [AppConfig.apiUrl] },
     },
     blockExplorers: {
-        default: { name: 'BuildBear Explorer', url: 'https://explorer.buildbear.io/active-jubilee-2923109c' },
+        default: { name: 'BuildBear Explorer', url: 'https://explorer.buildbear.io/conservative-psylocke-3187ddff' },
     },
     contracts: {
     },
