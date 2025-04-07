@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { ArrowDown, RefreshCw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import eth from "../../public/eth.png";
 import usdc from "../../public/usdc.png";
-import { useAccount, useBalance, useBlockNumber, useReadContract } from "wagmi";
+import { useAccount, useBalance, useWriteContract, useSimulateContract, type UseSimulateContractReturnType } from "wagmi";
+import { dexAggABI } from "@/contracts/dexAggABI";
 
 // Define token interface
 interface Token {
@@ -63,6 +64,7 @@ export const Swap = () => {
   const [showTokenSelectTo, setShowTokenSelectTo] = useState<boolean>(false);
 
   const { address: userAddress } = useAccount();
+  const { data: hash, writeContract } = useWriteContract();
 
   // Get WETH balance
   const { data: wethBalanceData } = useBalance({
@@ -91,7 +93,7 @@ export const Swap = () => {
 
     let fracStr = frac.toString();
     fracStr = fracStr.padStart(decimals, "0");
-    
+
     // Limit to maxDecimals and remove trailing zeros
     fracStr = fracStr.substring(0, maxDecimals).replace(/0+$/, "");
 
@@ -158,38 +160,23 @@ export const Swap = () => {
     }
   }, [tokens]);
 
-  const getQuote = async (
-    from: Token | null,
-    to: Token | null,
-    amount: bigint
-  ) => {
-    if (!from || !to || amount <= 0n) {
-      setToAmount(0n);
-      setRate(0n);
-      return;
+  const exchangedToken = useSimulateContract({
+    ...dexAggABI,
+    functionName: "getBestQuoteWithSplit",
+    args: [
+      fromAmount,
+      50n,
+    ],
+    query: {
+      enabled: fromAmount > 0n,
     }
-
-    const mockExchangeRates: ExchangeRates = {
-      eth: { usdc: 2000000n }, // 1 ETH = 2,000 USDC  
-      usdc: { eth: 50n }, // 1 USDC = 0.02 ETH
-    };
-
-    const exchangeRate = mockExchangeRates[from.id]?.[to.id] || 0n;
-    setRate(exchangeRate);
-
-    if (exchangeRate > 0n) {
-      const convertedAmount = (amount * exchangeRate) / BigInt(10) ** BigInt(from.decimals);
-      setToAmount(convertedAmount);
-    } else {
-      setToAmount(0n);
-    }
-  };
-
+  });
   useEffect(() => {
-    if (fromAmount > 0n) {
-      getQuote(fromToken, toToken, fromAmount);
+    if (exchangedToken.isSuccess && exchangedToken.data) {
+      const exchange = exchangedToken.data.result[0].toString();
+      setToAmount(BigInt(exchange));
     }
-  }, [fromToken, toToken, fromAmount]);
+  }, [exchangedToken.isSuccess, exchangedToken.data]);
 
   const handleSwapTokens = (): void => {
     const temp = fromToken;
