@@ -34,9 +34,9 @@ interface ExchangeRates {
 
 const tokensData: Token[] = [
   {
-    id: "eth",
-    name: "Ethereum",
-    symbol: "ETH",
+    id: "weth",
+    name: "Wrapped Ethereum",
+    symbol: "WETH",
     logo: eth,
     address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     decimals: 18,
@@ -64,11 +64,6 @@ export const Swap = () => {
 
   const { address: userAddress } = useAccount();
 
-  // Get ETH balance
-  const { data: ethBalanceData } = useBalance({
-    address: userAddress,
-  });
-
   // Get WETH balance
   const { data: wethBalanceData } = useBalance({
     address: userAddress,
@@ -78,16 +73,16 @@ export const Swap = () => {
   // Get from token balance
   const { data: fromBalanceData } = useBalance({
     address: userAddress,
-    token: fromToken.id === "eth" ? undefined : fromToken.address,
+    token: fromToken.id === "eth" ? "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" : fromToken.address,
   });
 
   // Get to token balance
   const { data: toBalanceData } = useBalance({
     address: userAddress,
-    token: toToken.id === "eth" ? undefined : toToken.address,
+    token: toToken.id === "eth" ? "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" : toToken.address,
   });
 
-  const formatBalance = (value: bigint, decimals: number): string => {
+  const formatBalance = (value: bigint, decimals: number, maxDecimals: number = 6): string => {
     if (!value) return "0";
 
     const divisor = BigInt(10) ** BigInt(decimals);
@@ -96,7 +91,9 @@ export const Swap = () => {
 
     let fracStr = frac.toString();
     fracStr = fracStr.padStart(decimals, "0");
-    fracStr = fracStr.replace(/0+$/, "");
+    
+    // Limit to maxDecimals and remove trailing zeros
+    fracStr = fracStr.substring(0, maxDecimals).replace(/0+$/, "");
 
     if (fracStr === "") {
       return whole.toString();
@@ -105,28 +102,26 @@ export const Swap = () => {
     return `${whole}.${fracStr}`;
   };
 
-  // Add ETH + WETH balance
+  // Update ETH token with WETH balance
   useEffect(() => {
-    if (ethBalanceData && wethBalanceData) {
-      const total = ethBalanceData.value + wethBalanceData.value;
-
+    if (wethBalanceData) {
       setTokens((prevTokens) => {
         return prevTokens.map((token) => {
           if (token.id === "eth") {
-            return { ...token, balance: total };
+            return { ...token, balance: wethBalanceData.value };
           }
           return token;
         });
       });
     }
-  }, [ethBalanceData, wethBalanceData]);
+  }, [wethBalanceData]);
 
   // Update from token balance
   useEffect(() => {
     if (fromBalanceData) {
       setTokens((prevTokens) => {
         return prevTokens.map((token) => {
-          if (token.id === fromToken.id && token.id !== "eth") {
+          if (token.id === fromToken.id) {
             return { ...token, balance: fromBalanceData.value };
           }
           return token;
@@ -140,7 +135,7 @@ export const Swap = () => {
     if (toBalanceData) {
       setTokens((prevTokens) => {
         return prevTokens.map((token) => {
-          if (token.id === toToken.id && token.id !== "eth") {
+          if (token.id === toToken.id) {
             return { ...token, balance: toBalanceData.value };
           }
           return token;
@@ -281,7 +276,7 @@ export const Swap = () => {
                     <div className="text-sm text-neutral-500">{t.symbol}</div>
                   </div>
                 </div>
-                <div>{t.balance ? formatBalance(t.balance, t.decimals) : "0"}</div>
+                <div>{t.balance ? formatBalance(t.balance, t.decimals, 6) : "0"}</div>
               </div>
             ))}
           </div>
@@ -323,7 +318,7 @@ export const Swap = () => {
               />
             </div>
             <CardDescription>
-              bal: {fromToken.balance ? formatBalance(fromToken.balance, fromToken.decimals) : "0"} {fromToken.symbol}
+              bal: {fromToken.balance ? formatBalance(fromToken.balance, fromToken.decimals, 6) : "0"} {fromToken.symbol}
             </CardDescription>
           </div>
 
@@ -348,7 +343,7 @@ export const Swap = () => {
               <Input
                 type="text"
                 placeholder="0"
-                value={toAmount === 0n ? "" : formatBalance(toAmount, toToken.decimals)}
+                value={toAmount === 0n ? "" : formatBalance(toAmount, toToken.decimals, 6)}
                 readOnly
                 className="border-none !text-3xl bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
