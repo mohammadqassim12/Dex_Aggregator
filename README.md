@@ -4,11 +4,11 @@ A decentralized exchange (DEX) aggregator that finds the best quote for token sw
 
 ## Student Contributors
 
-| Name               |  Student Number     |
+| Name               | Student Number     |
 |--------------------|---------------------|
-|  Mohammad Al-Qasem |     1007976674      |
-|    Danny Yang      |     1009106030      |
-|Ankhjargal Ankhbayar|     1008494498      |
+| Mohammad Al-Qasem  | 1007976674          |
+| Danny Yang         | 1009106030          |
+| Ankhjargal Ankhbayar | 1008494498       |
 
 ---
 
@@ -27,14 +27,14 @@ A decentralized exchange (DEX) aggregator that finds the best quote for token sw
   ```env
   PRIVATE_KEY=
   NETWORK_URL=YOUR_BUILDBEAR_NETWORK
-```
+  ```
 
 ---
 
 ## Environment Setup
 
 Install dependencies:
-```
+```bash
 npm install
 ```
 
@@ -42,8 +42,7 @@ npm install
 
 ## Deployment
 To deploy the smart contract to Buildbear:
-
-```
+```bash
 npx hardhat run scripts/deploy.js --network buildbear
 ```
 
@@ -51,8 +50,7 @@ npx hardhat run scripts/deploy.js --network buildbear
 
 ## Quoting
 To fetch the best quote for both swap directions:
-
-```
+```bash
 npx hardhat run scripts/quote.js --network buildbear
 ```
 
@@ -60,16 +58,16 @@ npx hardhat run scripts/quote.js --network buildbear
 
 ## Swap Execution
 To test an actual swap (e.g., WETH → USDC followed by USDC → WETH):
-
-```
+```bash
 npx hardhat run scripts/executeSwap.js --network buildbear
 ```
 (This script also handles wrapping ETH to WETH and approving the aggregator contract.)
+
 ---
 
-## Frontend Instructions (To Be Completed)
+## Frontend Instructions 
 
-_This section will explain how to run the frontend app._
+Add data here
 
 ---
 
@@ -81,4 +79,3 @@ Presentation slides for the project are included in this repository.
 - [What is a DEX Aggregator? – Coinbase](https://www.coinbase.com/learn/crypto-glossary/what-is-a-dex-aggregator)
 - [Decentralized Exchange Development – Codewave](https://codewave.com/insights/decentralized-exchange-development/)
 - [What Are DEX Aggregators? – CoinMarketCap Academy](https://coinmarketcap.com/academy/article/what-are-dex-aggregators-a-deep-dive-by-1inch)
-
