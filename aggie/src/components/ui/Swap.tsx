@@ -26,13 +26,6 @@ interface Token {
   decimals: number;
 }
 
-// Define exchange rates interface
-interface ExchangeRates {
-  [key: string]: {
-    [key: string]: bigint;
-  };
-}
-
 const tokensData: Token[] = [
   {
     id: "weth",
@@ -66,22 +59,9 @@ export const Swap = () => {
   const { address: userAddress } = useAccount();
   const { data: hash, writeContract } = useWriteContract();
 
-  // Get WETH balance
-  const { data: wethBalanceData } = useBalance({
+  const { data: fromBal } = useBalance({
     address: userAddress,
-    token: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-  });
-
-  // Get from token balance
-  const { data: fromBalanceData } = useBalance({
-    address: userAddress,
-    token: fromToken.id === "eth" ? "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" : fromToken.address,
-  });
-
-  // Get to token balance
-  const { data: toBalanceData } = useBalance({
-    address: userAddress,
-    token: toToken.id === "eth" ? "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" : toToken.address,
+    token: fromToken.address,
   });
 
   const formatBalance = (value: bigint, decimals: number, maxDecimals: number = 6): string => {
@@ -104,47 +84,19 @@ export const Swap = () => {
     return `${whole}.${fracStr}`;
   };
 
-  // Update ETH token with WETH balance
-  useEffect(() => {
-    if (wethBalanceData) {
-      setTokens((prevTokens) => {
-        return prevTokens.map((token) => {
-          if (token.id === "eth") {
-            return { ...token, balance: wethBalanceData.value };
-          }
-          return token;
-        });
-      });
-    }
-  }, [wethBalanceData]);
-
   // Update from token balance
   useEffect(() => {
-    if (fromBalanceData) {
+    if (fromBal) {
       setTokens((prevTokens) => {
         return prevTokens.map((token) => {
           if (token.id === fromToken.id) {
-            return { ...token, balance: fromBalanceData.value };
+            return { ...token, balance: fromBal.value };
           }
           return token;
         });
       });
     }
-  }, [fromBalanceData, fromToken.id]);
-
-  // Update to token balance
-  useEffect(() => {
-    if (toBalanceData) {
-      setTokens((prevTokens) => {
-        return prevTokens.map((token) => {
-          if (token.id === toToken.id) {
-            return { ...token, balance: toBalanceData.value };
-          }
-          return token;
-        });
-      });
-    }
-  }, [toBalanceData, toToken.id]);
+  }, [fromBal, fromToken.id]);
 
   // Update fromToken and toToken when tokens state changes
   useEffect(() => {
@@ -342,7 +294,7 @@ export const Swap = () => {
           <Button
             className="w-full bg-yellow-500 py-6 h-10 rounded-xl"
             size="lg"
-            disabled={!fromAmount || !toAmount || loading}
+            disabled={!fromAmount || !toAmount || loading || fromAmount > (fromToken.balance ?? 0n)}
             onClick={handleSwap}
           >
             {loading ? (
