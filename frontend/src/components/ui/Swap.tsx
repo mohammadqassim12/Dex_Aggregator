@@ -67,16 +67,20 @@ export const Swap = () => {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [slippage, setSlippage] = useState<number>(0.5);
   const [slippageInput, setSlippageInput] = useState<string>("0.5");
-  const [deadline, setDeadline] = useState<number>(10); // Default 10 blocks
+  const [deadline, setDeadline] = useState<number>(2); // Default 2 minutes
 
   const { address: userAddress } = useAccount();
-  const { data: hash, writeContract, isPending, isSuccess, isError, error, reset } = useWriteContract();
+  const { data: hash, writeContract, isPending, isSuccess, isError, reset } = useWriteContract();
+  const { writeContract: writeContractApp} = useWriteContract();
 
 
   // Get from token balance
   const { data: fromBal } = useBalance({
     address: userAddress,
     token: fromToken.address,
+    query: {
+      refetchInterval: 10000,
+    },
   });
 
   const formatBalance = (value: bigint, decimals: number, maxDecimals: number = 6): string => {
@@ -129,9 +133,10 @@ export const Swap = () => {
   }, [tokens]);
 
   const exchangedToken = useSimulateContract({
-    ...dexAggABI,
+    address: dexAggABI.address as `0x${string}`,
+    abi: dexAggABI.abi,
     functionName: "getBestQuoteWithSplit",
-    args: [fromAmount, fromToken.address, toToken.address, 50n],
+    args: [fromAmount, fromToken.address, toToken.address, BigInt(slippage * 100)],
     query: {
       enabled: fromAmount > 0n,
     },
@@ -139,10 +144,11 @@ export const Swap = () => {
 
   useEffect(() => {
     if (exchangedToken.isSuccess && exchangedToken.data) {
+      reset();
       const exchange = exchangedToken.data.result[0].toString();
       setToAmount(BigInt(exchange));
     }
-  }, [exchangedToken.isSuccess, exchangedToken.data]);
+  }, [exchangedToken.isSuccess, exchangedToken.data, reset]);
 
   const handleSwapTokens = (): void => {
     reset();
@@ -158,20 +164,38 @@ export const Swap = () => {
   const handleSwap = async () => {
     setLoading(true);
     try {
-      if (!exchangedToken.data || !exchangedToken.data.result || blockNumber === undefined) {
+      if (!exchangedToken.data || !exchangedToken.data.result || blockNumber === undefined || fromAmount === 0n) {
         return;
       }
+      const amountIn = fromAmount;
       writeContract({
-        ...dexAggABI,
+        address: fromToken.address as `0x${string}`,
+        abi: [
+          {
+            name: "approve",
+            type: "function",
+            inputs: [
+              { name: "spender", type: "address" },
+              { name: "amount", type: "uint256" },
+            ],
+          },
+        ],
+        functionName: "approve",
+        args: [dexAggABI.address, amountIn],
+      });
+      writeContract({
+        address: dexAggABI.address as `0x${string}`,
+        abi: dexAggABI.abi,
         functionName: "executeSwap",
         args: [
-          fromAmount,
+          amountIn,
           fromToken.address,
           toToken.address,
-          500,
+          exchangedToken.data?.result[4],
           exchangedToken.data?.result[3],
-          exchangedToken.data?.result[2],
-          blockNumber + BigInt(deadline),
+          // exchangedToken.data?.result[2],
+          0n,
+          BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
         ],
       });
       setFromAmount(0n);
@@ -347,7 +371,7 @@ export const Swap = () => {
                         className="w-20"
                         min={1}
                       />
-                      <div>blocks</div>
+                      <div>minutes</div>
                     </div>
                   </div>
                 </div>
@@ -428,7 +452,7 @@ export const Swap = () => {
           )}
           {isError && (
             <div className="text-sm text-red-500 px-2 mb-2">
-              Error swapping: {error.message}
+              Error swapping
             </div>
           )}
           {isSuccess && (
@@ -474,7 +498,7 @@ export const Swap = () => {
             ) : fromAmount > (fromToken.balance ?? 0n) ? (
               "Insufficient balance"
             ) : (
-              "Swap"
+              "Approve + Swap"
             )}
           </Button>
         </CardContent>

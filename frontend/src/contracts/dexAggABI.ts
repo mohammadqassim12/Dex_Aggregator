@@ -47,6 +47,11 @@ export const dexAggABI = {
                     "internalType": "uint256",
                     "name": "splitPercentToUni",
                     "type": "uint256"
+                },
+                {
+                    "internalType": "uint24",
+                    "name": "uniFeeUsed",
+                    "type": "uint24"
                 }
             ],
             "stateMutability": "nonpayable",
