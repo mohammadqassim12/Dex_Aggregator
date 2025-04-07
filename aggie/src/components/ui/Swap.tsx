@@ -1,4 +1,4 @@
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { ArrowDown, RefreshCw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import eth from "../../public/eth.png";
 import usdc from "../../public/usdc.png";
-import { useAccount, useBalance, useWriteContract, useSimulateContract, type UseSimulateContractReturnType } from "wagmi";
+import { useAccount, useBalance, useWriteContract, useSimulateContract } from "wagmi";
 import { dexAggABI } from "@/contracts/dexAggABI";
 
 // Define token interface
@@ -21,6 +24,7 @@ interface Token {
   name: string;
   symbol: string;
   balance?: bigint;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logo: any;
   address: `0x${string}`;
   decimals: number;
@@ -50,15 +54,26 @@ export const Swap = () => {
   const [fromToken, setFromToken] = useState<Token>(tokens[0]);
   const [toToken, setToToken] = useState<Token>(tokens[1]);
   const [fromAmount, setFromAmount] = useState<bigint>(0n);
+  const [fromAmountInput, setFromAmountInput] = useState<string>("");
   const [toAmount, setToAmount] = useState<bigint>(0n);
-  const [rate, setRate] = useState<bigint>(0n);
+
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Token selection
   const [showTokenSelectFrom, setShowTokenSelectFrom] = useState<boolean>(false);
   const [showTokenSelectTo, setShowTokenSelectTo] = useState<boolean>(false);
 
-  const { address: userAddress } = useAccount();
-  const { data: hash, writeContract } = useWriteContract();
+  // Settings
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [slippage, setSlippage] = useState<number>(0.5);
+  const [slippageInput, setSlippageInput] = useState<string>("0.5");
+  const [deadline, setDeadline] = useState<number>(10); // Default 10 blocks
 
+  const { address: userAddress } = useAccount();
+  const { writeContract } = useWriteContract();
+
+
+  // Get from token balance
   const { data: fromBal } = useBalance({
     address: userAddress,
     token: fromToken.address,
@@ -115,14 +130,12 @@ export const Swap = () => {
   const exchangedToken = useSimulateContract({
     ...dexAggABI,
     functionName: "getBestQuoteWithSplit",
-    args: [
-      fromAmount,
-      50n,
-    ],
+    args: [fromAmount, 50n],
     query: {
       enabled: fromAmount > 0n,
-    }
+    },
   });
+
   useEffect(() => {
     if (exchangedToken.isSuccess && exchangedToken.data) {
       const exchange = exchangedToken.data.result[0].toString();
@@ -134,8 +147,6 @@ export const Swap = () => {
     const temp = fromToken;
     setFromToken(toToken);
     setToToken(temp);
-    setFromAmount(toAmount);
-    setToAmount(fromAmount);
   };
 
   const handleSwap = async () => {
@@ -143,6 +154,7 @@ export const Swap = () => {
     try {
       alert(`Swapped ${formatBalance(fromAmount, fromToken.decimals)} ${fromToken.symbol} for ${formatBalance(toAmount, toToken.decimals)} ${toToken.symbol}`);
       setFromAmount(0n);
+      setFromAmountInput("");
       setToAmount(0n);
     } catch (error) {
       console.error("Swap failed:", error);
@@ -154,24 +166,60 @@ export const Swap = () => {
 
   const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    setFromAmountInput(value);
+
     if (value === "") {
       setFromAmount(0n);
       setToAmount(0n);
-    } else {
-      try {
-        const [whole, frac = ""] = value.split(".");
-        const decimal = BigInt(whole) * BigInt(10) ** BigInt(fromToken.decimals);
+      return;
+    }
 
-        if (frac) {
-          const formatFrac = frac.padEnd(fromToken.decimals, "0").slice(0, fromToken.decimals);
-          const valFrac = BigInt(formatFrac);
-          setFromAmount(decimal + valFrac);
-        } else {
-          setFromAmount(decimal);
-        }
-      } catch (error) {
-        console.error("Invalid input:", error);
+    try {
+      const [whole, frac = ""] = value.split(".");
+      const wholeBigInt = whole === "" ? 0n : BigInt(whole);
+      const decimal = wholeBigInt * BigInt(10) ** BigInt(fromToken.decimals);
+
+      if (frac) {
+        const paddedFrac = frac.padEnd(fromToken.decimals, "0").slice(0, fromToken.decimals);
+        const fracBigInt = BigInt(paddedFrac);
+        setFromAmount(decimal + fracBigInt);
+      } else {
+        setFromAmount(decimal);
       }
+    } catch (error) {
+      console.error("Invalid input:", error);
+    }
+  };
+
+  const handleSlippageSliderChange = (value: number[]) => {
+    setSlippage(value[0]);
+    setSlippageInput(value[0].toString());
+  };
+
+  const handleSlippageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSlippageInput(value);
+
+    if (value === "") {
+      setSlippage(0);
+      return;
+    }
+
+    const parsedValue = parseFloat(value);
+    if (!isNaN(parsedValue) && parsedValue >= 0 && parsedValue <= 100) {
+      setSlippage(parsedValue);
+    }
+  };
+
+  const handleDeadlineChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value === "") {
+      setDeadline(1);
+      return;
+    }
+
+    const value = parseInt(e.target.value);
+    if (value > 0) {
+      setDeadline(value);
     }
   };
 
@@ -232,9 +280,58 @@ export const Swap = () => {
             <CardTitle className="text-xl border-0 px-6 py-2 rounded-3xl dark:bg-neutral-800/50">
               Swap
             </CardTitle>
-            <Button variant="ghost" size="icon" className="h-10 w-10 p-0 m-0">
-              <Settings color="#FFDE21" size={32} className="h-8 w-8" />
-            </Button>
+            <Dialog open={showSettings} onOpenChange={setShowSettings}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10 p-0 m-0">
+                  <Settings color="#FFDE21" size={32} className="h-8 w-8" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Transaction Settings</DialogTitle>
+                </DialogHeader>
+                <div className="py-2">
+                  <div className="pb-2">
+                    <Label className="text-md">Slippage Tolerance</Label>
+                    <div className="flex items-between gap-2">
+                      <Slider
+                        value={[slippage]}
+                        min={0.1}
+                        max={5}
+                        step={0.1}
+                        onValueChange={handleSlippageSliderChange}
+                        className="flex-1"
+                      />
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="text"
+                          value={slippageInput}
+                          onChange={handleSlippageInputChange}
+                          className="w-16"
+                        />
+                        <div>%</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-md pb-2">Transaction Deadline</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        type="number"
+                        value={deadline}
+                        onChange={handleDeadlineChange}
+                        className="w-20"
+                        min={1}
+                      />
+                      <div>blocks</div>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setShowSettings(false)}>Save</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {/* From token */}
@@ -246,18 +343,15 @@ export const Swap = () => {
               <Input
                 type="text"
                 placeholder="0"
-                value={fromAmount === 0n ? "" : formatBalance(fromAmount, fromToken.decimals)}
+                value={fromAmountInput}
                 onChange={handleFromAmountChange}
                 className="border-none !text-3xl bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <TokenSelect
-                token={fromToken}
-                onSelect={setFromToken}
-                side="from"
-              />
+              <TokenSelect token={fromToken} onSelect={setFromToken} side="from" />
             </div>
             <CardDescription>
-              bal: {fromToken.balance ? formatBalance(fromToken.balance, fromToken.decimals, 6) : "0"} {fromToken.symbol}
+              bal: {fromToken.balance ? formatBalance(fromToken.balance, fromToken.decimals, 6) : "0"}{" "}
+              {fromToken.symbol}
             </CardDescription>
           </div>
 
@@ -290,6 +384,15 @@ export const Swap = () => {
             </div>
           </div>
 
+          {/* Rate display */}
+          {fromAmount > 0n && toAmount > 0n && (
+            <div className="text-sm text-neutral-500 mb-4 px-2">
+              1 {fromToken.symbol} ≈ {" "}
+              {formatBalance((toAmount * BigInt(10 ** fromToken.decimals)) / fromAmount, toToken.decimals, 6)}
+              {" "} {toToken.symbol}
+            </div>
+          )}
+
           {/* Swap button */}
           <Button
             className="w-full bg-yellow-500 py-6 h-10 rounded-xl"
@@ -304,6 +407,8 @@ export const Swap = () => {
               </div>
             ) : !fromAmount ? (
               "Enter an amount"
+            ) : fromAmount > (fromToken.balance ?? 0n) ? (
+              "Insufficient balance"
             ) : (
               "Swap"
             )}
@@ -313,3 +418,5 @@ export const Swap = () => {
     </div>
   );
 };
+
+export default Swap;
