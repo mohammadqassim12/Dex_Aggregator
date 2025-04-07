@@ -1,5 +1,7 @@
+import { AppConfig } from "../config";
+
 export const dexAggABI = {
-    address: "0x7eBBb1f61123b70395e0286780E1c84a9d69A7b0",
+    address: AppConfig.contractAddress,
     "abi": [
         {
             "inputs": [

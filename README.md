@@ -23,6 +23,7 @@ A decentralized exchange (DEX) aggregator that finds the best quote for token sw
 ## Requirements
 - Node.js
 - Hardhat
+- pnpm
 - A `.env` file configured with:
   ```env
   PRIVATE_KEY=
@@ -36,6 +37,12 @@ A decentralized exchange (DEX) aggregator that finds the best quote for token sw
 Install dependencies:
 ```bash
 npm install
+```
+
+Install frontend dependencies:
+```
+npm install
+pnpm install
 ```
 
 ---
@@ -66,8 +73,17 @@ npx hardhat run scripts/executeSwap.js --network buildbear
 ---
 
 ## Frontend Instructions 
+To run the frontend locally
+```bash
+pnpm run dev
+```
 
-Add data here
+To change the DEX Aggregator contract update the config.ts file in frontend/src
+```
+contractAddress: 'YOUR_CONTRACT_ADDR',
+apiUrl: 'YOUR_API_NETWORK',
+id: NETWORK_ID,
+```
 
 ---
 
