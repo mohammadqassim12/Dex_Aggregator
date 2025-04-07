@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import eth from "../../public/eth.png";
 import usdc from "../../public/usdc.png";
-import { useAccount, useBalance, useWriteContract, useSimulateContract } from "wagmi";
+import { useAccount, useBalance, useWriteContract, useSimulateContract, useBlockNumber } from "wagmi";
 import { dexAggABI } from "@/contracts/dexAggABI";
 
 // Define token interface
@@ -70,7 +70,7 @@ export const Swap = () => {
   const [deadline, setDeadline] = useState<number>(10); // Default 10 blocks
 
   const { address: userAddress } = useAccount();
-  const { writeContract } = useWriteContract();
+  const { data: hash, writeContract, isPending, isSuccess, isError, error, reset } = useWriteContract();
 
 
   // Get from token balance
@@ -101,6 +101,7 @@ export const Swap = () => {
 
   // Update from token balance
   useEffect(() => {
+    reset();
     if (fromBal) {
       setTokens((prevTokens) => {
         return prevTokens.map((token) => {
@@ -144,20 +145,40 @@ export const Swap = () => {
   }, [exchangedToken.isSuccess, exchangedToken.data]);
 
   const handleSwapTokens = (): void => {
-    const temp = fromToken;
+    reset();
+    const tempToken = fromToken;
     setFromToken(toToken);
-    setToToken(temp);
+    setFromAmount(toAmount);
+    setToToken(tempToken);
+    setFromAmountInput(formatBalance(toAmount, toToken.decimals));
+    setToAmount(0n);
   };
 
+  const { data: blockNumber } = useBlockNumber({ watch: true })
   const handleSwap = async () => {
     setLoading(true);
     try {
-      alert(`Swapped ${formatBalance(fromAmount, fromToken.decimals)} ${fromToken.symbol} for ${formatBalance(toAmount, toToken.decimals)} ${toToken.symbol}`);
+      if (!exchangedToken.data || !exchangedToken.data.result || blockNumber === undefined) {
+        return;
+      }
+      writeContract({
+        ...dexAggABI,
+        functionName: "executeSwap",
+        args: [
+          fromAmount,
+          fromToken.address,
+          toToken.address,
+          500,
+          exchangedToken.data?.result[3],
+          exchangedToken.data?.result[2],
+          blockNumber + BigInt(deadline),
+        ],
+      });
       setFromAmount(0n);
-      setFromAmountInput("");
       setToAmount(0n);
+      setFromAmountInput("");
     } catch (error) {
-      console.error("Swap failed:", error);
+      console.error("Swap error:", error);
       alert("Swap failed. Please try again.");
     } finally {
       setLoading(false);
@@ -227,15 +248,15 @@ export const Swap = () => {
     token: Token;
     onSelect: (token: Token) => void;
     side: "from" | "to";
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
   }
 
-  const TokenSelect = ({ token, onSelect, side }: TokenSelectProps) => {
-    const isOpen = side === "from" ? showTokenSelectFrom : showTokenSelectTo;
-    const setIsOpen = side === "from" ? setShowTokenSelectFrom : setShowTokenSelectTo;
+  const TokenSelect = ({ token, onSelect, side, open, onOpenChange }: TokenSelectProps) => {
     const currentTokenId = side === "from" ? fromToken.id : toToken.id;
 
     return (
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2 px-3">
             <img src={token.logo} alt={token.name} className="w-6 h-6" />
@@ -256,7 +277,7 @@ export const Swap = () => {
                 onClick={() => {
                   if (t.id === currentTokenId) return;
                   onSelect(t);
-                  setIsOpen(false);
+                  onOpenChange(false);
                 }}
               >
                 <div className="flex items-center gap-3">
@@ -350,7 +371,13 @@ export const Swap = () => {
                 onChange={handleFromAmountChange}
                 className="border-none !text-3xl bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <TokenSelect token={fromToken} onSelect={setFromToken} side="from" />
+              <TokenSelect
+                token={fromToken}
+                onSelect={handleSwapTokens}
+                side="from"
+                open={showTokenSelectFrom}
+                onOpenChange={setShowTokenSelectFrom}
+              />
             </div>
             <CardDescription>
               bal: {fromToken.balance ? formatBalance(fromToken.balance, fromToken.decimals, 6) : "0"}{" "}
@@ -371,7 +398,7 @@ export const Swap = () => {
           </div>
 
           {/* To token */}
-          <div className="bg-y-100 dark:bg-neutral-800/50 rounded-xl p-4 mb-4 pb-10">
+          <div className="bg-y-100 dark:bg-neutral-800/50 rounded-xl p-4 mb-2 pb-10">
             <CardHeader className="text-neutral-400 w-1/2 px-0">
               You receive
             </CardHeader>
@@ -383,17 +410,46 @@ export const Swap = () => {
                 readOnly
                 className="border-none !text-3xl bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <TokenSelect token={toToken} onSelect={setToToken} side="to" />
+              <TokenSelect
+                token={toToken}
+                onSelect={handleSwapTokens}
+                side="to"
+                open={showTokenSelectTo}
+                onOpenChange={setShowTokenSelectTo}
+              />
             </div>
           </div>
 
+          {/* Transaction Result */}
+          {isPending && (
+            <div className="text-sm text-neutral-500 px-2 mb-2">
+              Swapping...
+            </div>
+          )}
+          {isError && (
+            <div className="text-sm text-red-500 px-2 mb-2">
+              Error swapping: {error.message}
+            </div>
+          )}
+          {isSuccess && (
+            <div className="text-sm text-green-500 px-2 mb-2">
+              Swap successful! Hash: {hash}
+            </div>
+          )}
+
           {/* Rate display */}
           {fromAmount > 0n && toAmount > 0n && (
-            <div className="text-sm text-neutral-500 mb-4 px-2">
-              1 {fromToken.symbol} ≈ {" "}
-              {formatBalance((toAmount * BigInt(10 ** fromToken.decimals)) / fromAmount, toToken.decimals, 6)}
-              {" "} {toToken.symbol}
-            </div>
+            <>
+              <div className="text-sm text-neutral-500 px-2">
+                1 {fromToken.symbol} ≈ {" "}
+                {formatBalance((toAmount * BigInt(10 ** fromToken.decimals)) / fromAmount, toToken.decimals, 6)}
+                {" "} {toToken.symbol}
+              </div>
+              <div className="text-sm text-neutral-500 px-2 mb-2">
+                Uniswap: {exchangedToken.data?.result[3]}{"% | "}
+                Sushiswap: {BigInt(100) - (exchangedToken.data?.result[3] ?? 0n)}%
+              </div>
+            </>
           )}
 
           {/* Swap button */}
@@ -403,10 +459,15 @@ export const Swap = () => {
             disabled={!fromAmount || !toAmount || loading || fromAmount > (fromToken.balance ?? 0n)}
             onClick={handleSwap}
           >
-            {loading ? (
+            {isPending ? (
               <div className="flex items-center gap-2">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>{fromAmount ? "Swapping..." : "Getting quote..."}</span>
+                <span>Swapping ...</span>
+              </div>
+            ) : exchangedToken.isLoading ? (
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Getting quote...</span>
               </div>
             ) : !fromAmount ? (
               "Enter an amount"
