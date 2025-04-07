@@ -1,5 +1,5 @@
 export const dexAggABI = {
-    address: "0x21d37c3D76f1B24A501fD2B0468Ab88DADB75DB7",
+    address: "0x7eBBb1f61123b70395e0286780E1c84a9d69A7b0",
     "abi": [
         {
             "inputs": [
@@ -7,6 +7,16 @@ export const dexAggABI = {
                     "internalType": "uint256",
                     "name": "amountIn",
                     "type": "uint256"
+                },
+                {
+                    "internalType": "address",
+                    "name": "tokenIn",
+                    "type": "address"
+                },
+                {
+                    "internalType": "address",
+                    "name": "tokenOut",
+                    "type": "address"
                 },
                 {
                     "internalType": "uint256",

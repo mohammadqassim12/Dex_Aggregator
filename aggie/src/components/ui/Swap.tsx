@@ -130,7 +130,7 @@ export const Swap = () => {
   const exchangedToken = useSimulateContract({
     ...dexAggABI,
     functionName: "getBestQuoteWithSplit",
-    args: [fromAmount, 50n],
+    args: [fromAmount, fromToken.address, toToken.address, 50n],
     query: {
       enabled: fromAmount > 0n,
     },
@@ -232,6 +232,7 @@ export const Swap = () => {
   const TokenSelect = ({ token, onSelect, side }: TokenSelectProps) => {
     const isOpen = side === "from" ? showTokenSelectFrom : showTokenSelectTo;
     const setIsOpen = side === "from" ? setShowTokenSelectFrom : setShowTokenSelectTo;
+    const currentTokenId = side === "from" ? fromToken.id : toToken.id;
 
     return (
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -250,8 +251,10 @@ export const Swap = () => {
             {tokens.map((t) => (
               <div
                 key={t.id}
-                className="flex items-center justify-between p-3 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg cursor-pointer"
+                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer 
+                ${t.id === currentTokenId ? "text-neutral-600" : "hover:bg-neutral-100 dark:hover:bg-neutral-800"}`}
                 onClick={() => {
+                  if (t.id === currentTokenId) return;
                   onSelect(t);
                   setIsOpen(false);
                 }}
