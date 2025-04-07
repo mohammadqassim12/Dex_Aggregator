@@ -153,7 +153,9 @@ contract DEXAggregator {
     /// @notice Finds the best output by splitting a trade between Uniswap and Sushiswap
     /// @param amountIn The input amount of WETH
     /// @param slippageBps Slippage in basis points (e.g., 50 = 0.5%)
-    /// @return bestAmountOut The highest combined USDC output
+    /// @param tokenIn The input token address
+    /// @param tokenOut The output token address 
+    /// @return bestAmountOut The highest combined output
     /// @return dex A human-readable route description
     /// @return minAmountOut Minimum output accounting for slippage
     /// @return splitPercentToUni Percentage of trade to route through Uniswap
