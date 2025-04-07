@@ -21,57 +21,70 @@ async function main() {
     const deployedAddresses = JSON.parse(
         fs.readFileSync(path.join(__dirname, "deployed-addresses.json"), "utf8")
     );
-    // Get the aggregator instance (the generic version must have been deployed)
     const aggregator = await ethers.getContractAt("DEXAggregator", deployedAddresses.dexAggregator);
     console.log("Deployed aggregator address:", deployedAddresses.dexAggregator);
-    
-    // Set token addresses (using mainnet addresses on fork)
-    const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-    
-    const weth = new ethers.Contract(wethAddress, IERC20_ABI, deployer);
-    const usdc = new ethers.Contract(usdcAddress, USDC_ABI, deployer);
 
-    // Convert ETH to WETH if needed
-    const amountIn = ethers.parseUnits("1", 18);
+    const wethAddress = deployedAddresses.weth;
+    const usdcAddress = deployedAddresses.usdc;
+
+    const weth = new ethers.Contract(wethAddress, IERC20_ABI, deployer);
+    const usdc = new ethers.Contract(usdcAddress, IERC20_ABI, deployer);
+
+    // ====== WETH → USDC ======
+    const wethAmountIn = ethers.parseUnits("1", 18);
     let wethBalance = await weth.balanceOf(deployerAddress);
-    if (wethBalance  < amountIn) {
+    if (wethBalance < wethAmountIn) {
         console.log("Wrapping ETH to WETH...");
-        await (await weth.deposit({ value: amountIn })).wait();
+        await (await weth.deposit({ value: wethAmountIn })).wait();
     }
 
-    // Check pre-swap balances
-    wethBalance = await weth.balanceOf(deployerAddress);
-    let usdcBalance = await usdc.balanceOf(deployerAddress);
-    console.log("Pre-swap WETH balance:", ethers.formatUnits(wethBalance, 18));
-    console.log("Pre-swap USDC balance:", ethers.formatUnits(usdcBalance, 6));
+    console.log("\n--- Swapping WETH → USDC ---");
+    console.log("Pre-swap WETH:", ethers.formatUnits(await weth.balanceOf(deployerAddress), 18));
+    console.log("Pre-swap USDC:", ethers.formatUnits(await usdc.balanceOf(deployerAddress), 6));
 
-    // Approve aggregator to spend WETH (tokenIn for swap)
-    console.log("Approving aggregator to spend 1 WETH...");
-    await (await weth.approve(deployedAddresses.dexAggregator, amountIn)).wait();
+    await (await weth.approve(deployedAddresses.dexAggregator, wethAmountIn)).wait();
 
-    // Execute generic swap: WETH -> USDC
-    console.log("Executing swap...");
-    const deadline = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
-    const tx = await aggregator.executeSwap(
-        amountIn,
-        wethAddress,   // tokenIn is WETH
-        usdcAddress,   // tokenOut is USDC
-        500,           // Fee tier (500 = 0.05%)
-        90,            // For example, 90% routing through Uniswap V3, rest through Sushiswap
-        0,             // For testing, set minTotalAmountOut to 0 (calculate based on slippage in production)
+    const deadline = Math.floor(Date.now() / 1000) + 300;
+    const tx1 = await aggregator.executeSwap(
+        wethAmountIn,
+        wethAddress,
+        usdcAddress,
+        500,
+        90,
+        0,
         deadline,
         { gasLimit: 500000 }
     );
-    
-    const receipt = await tx.wait();
-    console.log("Swap successful! TX hash:", receipt.hash);
+    await tx1.wait();
+    console.log("Swap WETH → USDC successful!");
 
-    // Check post-swap balances
-    wethBalance = await weth.balanceOf(deployerAddress);
-    usdcBalance = await usdc.balanceOf(deployerAddress);
-    console.log("Post-swap WETH balance:", ethers.formatUnits(wethBalance, 18));
-    console.log("Post-swap USDC balance:", ethers.formatUnits(usdcBalance, 6));
+    console.log("Post-swap WETH:", ethers.formatUnits(await weth.balanceOf(deployerAddress), 18));
+    console.log("Post-swap USDC:", ethers.formatUnits(await usdc.balanceOf(deployerAddress), 6));
+
+    // ====== USDC → WETH ======
+    const usdcAmountIn = ethers.parseUnits("1000", 6);
+    console.log("\n--- Swapping USDC → WETH ---");
+
+    console.log("Pre-swap USDC:", ethers.formatUnits(await usdc.balanceOf(deployerAddress), 6));
+    console.log("Pre-swap WETH:", ethers.formatUnits(await weth.balanceOf(deployerAddress), 18));
+
+    await (await usdc.approve(deployedAddresses.dexAggregator, usdcAmountIn)).wait();
+
+    const tx2 = await aggregator.executeSwap(
+        usdcAmountIn,
+        usdcAddress,
+        wethAddress,
+        500,
+        90,
+        0,
+        deadline,
+        { gasLimit: 500000 }
+    );
+    await tx2.wait();
+    console.log("Swap USDC → WETH successful!");
+
+    console.log("Post-swap USDC:", ethers.formatUnits(await usdc.balanceOf(deployerAddress), 6));
+    console.log("Post-swap WETH:", ethers.formatUnits(await weth.balanceOf(deployerAddress), 18));
 }
 
 main().catch(console.error);

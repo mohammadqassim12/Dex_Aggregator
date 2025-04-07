@@ -91,8 +91,8 @@ contract DEXAggregator {
         return amountOut;
     }
 
-    function getQuoteSushiswap(uint256 amountIn) public view returns (uint256 amountOut) {
-        address pair = IUniswapV2Factory(sushiswapFactory).getPair(weth, usdc);
+    function getQuoteSushiswap(uint256 amountIn, address tokenIn, address tokenOut) public view returns (uint256 amountOut) {
+        address pair = IUniswapV2Factory(sushiswapFactory).getPair(tokenIn, tokenOut);
         require(pair != address(0), "Pair not found");
 
         (uint112 reserve0, uint112 reserve1, ) = IUniswapV2Pair(pair).getReserves();
@@ -100,7 +100,7 @@ contract DEXAggregator {
 
         uint reserveIn;
         uint reserveOut;
-        if (token0 == weth) {
+        if (token0 == tokenIn) {
             reserveIn = reserve0;
             reserveOut = reserve1;
         } else {
@@ -157,22 +157,15 @@ contract DEXAggregator {
     /// @return dex A human-readable route description
     /// @return minAmountOut Minimum output accounting for slippage
     /// @return splitPercentToUni Percentage of trade to route through Uniswap
-    function getBestQuoteWithSplit(uint256 amountIn, uint256 slippageBps)
-        external
-        returns (
-            uint256 bestAmountOut,
-            string memory dex,
-            uint256 minAmountOut,
-            uint256 splitPercentToUni
-        )
-    {
+    function getBestQuoteWithSplit( uint256 amountIn, address tokenIn, address tokenOut, uint256 slippageBps) external 
+    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut, uint256 splitPercentToUni ) {
         // STEP 1: Find best Uniswap V3 fee tier
         uint24[3] memory fees = [uint24(500), 3000, 10000];
         uint256 bestUniOut = 0;
         uint24 bestUniFee = 3000;
 
         for (uint256 i = 0; i < fees.length; i++) {
-            uint256 quote = getQuoteUniswapV3(amountIn, weth, usdc, fees[i]);
+            uint256 quote = getQuoteUniswapV3(amountIn, tokenIn, tokenOut, fees[i]);
             if (quote > bestUniOut) {
                 bestUniOut = quote;
                 bestUniFee = fees[i];
@@ -188,8 +181,8 @@ contract DEXAggregator {
             uint256 uniAmount = (amountIn * i) / 100;
             uint256 sushiAmount = amountIn - uniAmount;
 
-            uint256 uniOut = getQuoteUniswapV3(uniAmount, weth, usdc, bestUniFee);
-            uint256 sushiOut = getQuoteSushiswap(sushiAmount);
+            uint256 uniOut = getQuoteUniswapV3(uniAmount, tokenIn, tokenOut, bestUniFee);
+            uint256 sushiOut = getQuoteSushiswap(sushiAmount, tokenIn, tokenOut);
 
             uint256 totalOut = uniOut + sushiOut;
 
