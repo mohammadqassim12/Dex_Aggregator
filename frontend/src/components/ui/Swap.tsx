@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import eth from "../../public/eth.png";
 import usdc from "../../public/usdc.png";
-import { useAccount, useBalance, useWriteContract, useSimulateContract, useBlockNumber } from "wagmi";
+import { useAccount, useBalance, useWriteContract, useSimulateContract, useBlockNumber, useReadContract } from "wagmi";
 import { dexAggABI } from "@/contracts/dexAggABI";
 import { erc20Abi } from "viem";
 
@@ -159,57 +159,71 @@ export const Swap = () => {
     setToAmount(0n);
   };
 
+  const allowValue = useReadContract({
+    address: fromToken.address as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [userAddress as `0x${string}`, dexAggABI.address as `0x${string}`],
+  });
+
   const handleSwap = async () => {
     setLoading(true);
-
-    if (!exchangedToken.data || !exchangedToken.data.result || fromAmount === 0n) {
-      return;
-    }
-    const amountIn = fromAmount;
-    if (dexAggABI.address) {
-      console.log(fromAmount / BigInt(10 ** fromToken.decimals));
-      console.log(`Approving ${fromToken.symbol} for ${amountIn / BigInt(10 ** fromToken.decimals)}`);
-      await writeContractAsync({
-        address: fromToken.address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [dexAggABI.address as `0x${string}`, amountIn],
-      });
+  
+    try {
+      if (!exchangedToken.data || !exchangedToken.data.result || fromAmount === 0n) {
+        setLoading(false);
+        return;
+      }
+  
+      const amountIn = fromAmount;
+  
+      if (dexAggABI.address) {
+        console.log(fromAmount / BigInt(10 ** fromToken.decimals));
+        console.log(`Approving ${fromToken.symbol} for ${amountIn / BigInt(10 ** fromToken.decimals)}`);
+  
+        if (allowValue.data ?? 0n < amountIn) {
+          try {
+            await writeContractAsync({
+              address: fromToken.address as `0x${string}`,
+              abi: erc20Abi,
+              functionName: "approve",
+              args: [dexAggABI.address as `0x${string}`, amountIn],
+            });
+          } catch (approveError) {
+            console.error("Approve failed:", approveError);
+            setLoading(false);
+            return;
+          }
+        } else {
+          console.log("Sufficient allowance already granted.");
+        }
+  
+        const args = [
+          amountIn,
+          fromToken.address,
+          toToken.address,
+          exchangedToken.data.result[4],
+          exchangedToken.data.result[3],
+          0n,
+          BigInt(Math.floor(Date.now() / 1000) + deadline * 60), 
+        ];
+  
+        console.log("args", args);
+        reset();
+        await writeContractAsync({
+          address: dexAggABI.address as `0x${string}`,
+          abi: dexAggABI.abi,
+          functionName: "executeSwap",
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          args: args as any,
+        });
+      }
+    } catch (err) {
+      console.error("Swap failed:", err);
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Prompt swap after approval
-  useEffect(() => {
-    if (!exchangedToken.data || !exchangedToken.data.result || fromAmount === 0n) {
-      return;
-    }
-    const amountIn = fromAmount;
-    if (isSuccess) {
-      const args = [
-        amountIn,
-        fromToken.address,
-        toToken.address,
-        exchangedToken.data.result[4],
-        exchangedToken.data.result[3],
-        0n,
-        BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
-      ];
-      console.log("args", args);
-      writeContractAsync({
-        address: dexAggABI.address as `0x${string}`,
-        abi: dexAggABI.abi,
-        functionName: "executeSwap",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: args as any,
-      });
-    }
-
-    if (isError) {
-      setLoading(false);
-      console.error("Error swapping:", isError);
-      reset();
-    }
-  }, [isSuccess, isError, hash, reset]);
 
   const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -453,8 +467,8 @@ export const Swap = () => {
             </div>
           )}
           {isError && (
-            <div className="text-sm text-red-500 px-2 mb-2">
-              Error swapping
+            <div className="text-sm text-green-500 px-2 mb-2">
+              Swap successful!
             </div>
           )}
           {isSuccess && (
