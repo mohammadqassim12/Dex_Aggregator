@@ -21,9 +21,11 @@ async function main() {
     const deployedAddresses = JSON.parse(
         fs.readFileSync(path.join(__dirname, "deployed-addresses.json"), "utf8")
     );
+    // Get the aggregator instance (the generic version must have been deployed)
     const aggregator = await ethers.getContractAt("DEXAggregator", deployedAddresses.dexAggregator);
     console.log("Deployed aggregator address:", deployedAddresses.dexAggregator);
     
+    // Set token addresses (using mainnet addresses on fork)
     const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
     
@@ -33,7 +35,7 @@ async function main() {
     // Convert ETH to WETH if needed
     const amountIn = ethers.parseUnits("1", 18);
     let wethBalance = await weth.balanceOf(deployerAddress);
-    if (wethBalance < amountIn) {
+    if (wethBalance  < amountIn) {
         console.log("Wrapping ETH to WETH...");
         await (await weth.deposit({ value: amountIn })).wait();
     }
@@ -44,18 +46,20 @@ async function main() {
     console.log("Pre-swap WETH balance:", ethers.formatUnits(wethBalance, 18));
     console.log("Pre-swap USDC balance:", ethers.formatUnits(usdcBalance, 6));
 
-    // Approve aggregator to spend WETH
-    console.log("Approving aggregator...");
+    // Approve aggregator to spend WETH (tokenIn for swap)
+    console.log("Approving aggregator to spend 1 WETH...");
     await (await weth.approve(deployedAddresses.dexAggregator, amountIn)).wait();
 
-    // Execute swap
+    // Execute generic swap: WETH -> USDC
     console.log("Executing swap...");
-    const deadline = Math.floor(Date.now() / 1000) + 300; 
+    const deadline = Math.floor(Date.now() / 1000) + 300; // 5 minutes from now
     const tx = await aggregator.executeSwap(
         amountIn,
-        500,            // Fee tier
-        90,            // % trough Uniswap V3
-        0,              // For testing, set minTotalAmountOut to 0 (adjust for slippage in production)
+        wethAddress,   // tokenIn is WETH
+        usdcAddress,   // tokenOut is USDC
+        500,           // Fee tier (500 = 0.05%)
+        90,            // For example, 90% routing through Uniswap V3, rest through Sushiswap
+        0,             // For testing, set minTotalAmountOut to 0 (calculate based on slippage in production)
         deadline,
         { gasLimit: 500000 }
     );
