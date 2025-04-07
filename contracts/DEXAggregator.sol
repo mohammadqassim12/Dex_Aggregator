@@ -160,7 +160,7 @@ contract DEXAggregator {
     /// @return minAmountOut Minimum output accounting for slippage
     /// @return splitPercentToUni Percentage of trade to route through Uniswap
     function getBestQuoteWithSplit( uint256 amountIn, address tokenIn, address tokenOut, uint256 slippageBps) external 
-    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut, uint256 splitPercentToUni ) {
+    returns (uint256 bestAmountOut, string memory dex, uint256 minAmountOut, uint256 splitPercentToUni, uint24 uniFeeUsed ) {
         // STEP 1: Find best Uniswap V3 fee tier
         uint24[3] memory fees = [uint24(500), 3000, 10000];
         uint256 bestUniOut = 0;
@@ -209,7 +209,7 @@ contract DEXAggregator {
             )
         );
 
-        return (maxOut, dexRoute, minAmountOut, bestSplit);
+        return (maxOut, dexRoute, minAmountOut, bestSplit, bestUniFee);
     }
 
     /// @notice Generic function to execute a swap from tokenIn to tokenOut.

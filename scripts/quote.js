@@ -12,7 +12,7 @@ function formatAmount(tokenAddress, amount, addresses) {
 async function quoteAndPrint(tokenIn, tokenOut, amountIn, slippageBps, label, addresses) {
     const aggregator = await ethers.getContractAt("DEXAggregator", addresses.dexAggregator);
 
-    const [bestAmountOut, dexName, minAmountOut, splitPercentToUni] =
+    const [bestAmountOut, dexName, minAmountOut, splitPercentToUni, uniFeeUsed] =
         await aggregator.getFunction("getBestQuoteWithSplit").staticCall(amountIn, tokenIn, tokenOut, slippageBps);
 
     console.log(`\n🔄 ${label}`);
@@ -22,6 +22,7 @@ async function quoteAndPrint(tokenIn, tokenOut, amountIn, slippageBps, label, ad
     const uniSplit = Number(splitPercentToUni);
     const sushiSplit = 100 - uniSplit;
     console.log(`  Split: ${uniSplit}% to Uniswap / ${sushiSplit}% to Sushiswap`);
+    console.log("  Uni Fee Used:", uniFeeUsed);
 }
 
 async function main() {
