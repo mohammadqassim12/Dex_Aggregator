@@ -5,3 +5,4 @@ node_modules/
 .env
 scripts/deployed-addresses.json
 
+aggie/package-lock.json
