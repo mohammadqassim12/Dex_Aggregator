@@ -17,6 +17,7 @@ import eth from "../../public/eth.png";
 import usdc from "../../public/usdc.png";
 import { useAccount, useBalance, useWriteContract, useSimulateContract, useBlockNumber } from "wagmi";
 import { dexAggABI } from "@/contracts/dexAggABI";
+import { erc20Abi } from "viem";
 
 // Define token interface
 interface Token {
@@ -71,8 +72,6 @@ export const Swap = () => {
 
   const { address: userAddress } = useAccount();
   const { data: hash, writeContract, isPending, isSuccess, isError, reset } = useWriteContract();
-  const { writeContract: writeContractApp} = useWriteContract();
-
 
   // Get from token balance
   const { data: fromBal } = useBalance({
@@ -160,53 +159,43 @@ export const Swap = () => {
     setToAmount(0n);
   };
 
-  const { data: blockNumber } = useBlockNumber({ watch: true })
   const handleSwap = async () => {
     setLoading(true);
-    try {
-      if (!exchangedToken.data || !exchangedToken.data.result || blockNumber === undefined || fromAmount === 0n) {
-        return;
-      }
-      const amountIn = fromAmount;
-      writeContract({
-        address: fromToken.address as `0x${string}`,
-        abi: [
-          {
-            name: "approve",
-            type: "function",
-            inputs: [
-              { name: "spender", type: "address" },
-              { name: "amount", type: "uint256" },
-            ],
-          },
-        ],
-        functionName: "approve",
-        args: [dexAggABI.address, amountIn],
-      });
-      writeContract({
-        address: dexAggABI.address as `0x${string}`,
-        abi: dexAggABI.abi,
-        functionName: "executeSwap",
-        args: [
-          amountIn,
-          fromToken.address,
-          toToken.address,
-          exchangedToken.data?.result[4],
-          exchangedToken.data?.result[3],
-          // exchangedToken.data?.result[2],
-          0n,
-          BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
-        ],
-      });
-      setFromAmount(0n);
-      setToAmount(0n);
-      setFromAmountInput("");
-    } catch (error) {
-      console.error("Swap error:", error);
-      alert("Swap failed. Please try again.");
-    } finally {
-      setLoading(false);
+
+    if (!exchangedToken.data || !exchangedToken.data.result || fromAmount === 0n) {
+      return;
     }
+    const amountIn = fromAmount;
+    if (dexAggABI.address) {
+      console.log(fromAmount / BigInt(10 ** fromToken.decimals));
+      console.log(`Approving ${fromToken.symbol} for ${amountIn / BigInt(10 ** fromToken.decimals)}`);
+      await writeContract({
+        address: fromToken.address as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [dexAggABI.address as `0x${string}`, amountIn],
+      });
+    }
+
+    const args = [
+      amountIn,
+      fromToken.address,
+      toToken.address,
+      exchangedToken.data.result[4],
+      exchangedToken.data.result[3],
+      0n,
+      BigInt(Math.floor(Date.now() / 1000) + deadline * 60 * 1000),
+    ];
+    console.log("args", args);
+    await writeContract({
+      address: dexAggABI.address as `0x${string}`,
+      abi: dexAggABI.abi,
+      functionName: "executeSwap",
+      args: args as any,
+    });
+    // setFromAmount(0n);
+    // setToAmount(0n);
+    // setFromAmountInput("");
   };
 
   const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {

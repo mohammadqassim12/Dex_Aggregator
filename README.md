@@ -41,7 +41,6 @@ npm install
 
 Install frontend dependencies:
 ```
-npm install
 pnpm install
 ```
 
